@@ -26,7 +26,6 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
@@ -44,68 +43,63 @@ public class JasminMojo extends AbstractMojo {
     @Parameter(property = "project.build.outputDirectory", required = true, readonly = true)
     private File outputDirectory;
 
-
     @Parameter(property = "project.build.sourceDirectory", required = true, readonly = true)
     private File sourceDirectory;
 
+    @Parameter(property = "project.build.testOutputDirectory", required = true, readonly = true)
+    private File testOutputDirectory;
+
+    @Parameter(property = "project.build.testSourceDirectory", required = true, readonly = true)
+    private File testSourceDirectory;
+    
+    
+    static class JasminFileVisitor implements FileVisitor<Path> {
+        private File outputDirectory;
+        
+        JasminFileVisitor(File outputDirectory) {
+            this.outputDirectory = outputDirectory;
+        }
+        
+        @Override
+        public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+            return FileVisitResult.CONTINUE;
+        }
+
+        @Override
+        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+            String name = file.getFileName().toFile().getName();
+
+            if (!name.endsWith(".j")) {
+                return FileVisitResult.CONTINUE;
+            }
+
+            Main main = new Main();
+            StackMap.reinit();
+            String fname = file.toAbsolutePath().toString();
+            System.out.println("Processing: " + fname);
+            main.setDest_path(outputDirectory.getAbsolutePath());
+            main.assemble(fname);
+
+            return FileVisitResult.CONTINUE;
+        }
+
+        @Override
+        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+            return FileVisitResult.CONTINUE;
+        }
+
+        @Override
+        public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+            return FileVisitResult.CONTINUE;
+        }    
+    }
+    
     public void execute() throws MojoExecutionException {
-
-        Path sourcePath = sourceDirectory.toPath();
         try {
-            Files.walkFileTree(sourcePath, new FileVisitor<Path>() {
-                @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    String name = file.getFileName().toFile().getName();
-
-                    if (!name.endsWith(".j")) {
-                        return FileVisitResult.CONTINUE;
-                    }
-
-                    Main main = new Main();
-                    StackMap.reinit();
-                    String fname = file.toAbsolutePath().toString();
-                    System.out.println("Processing: " + fname);
-                    main.setDest_path(outputDirectory.getAbsolutePath());
-                    main.assemble(fname);
-
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                    return FileVisitResult.CONTINUE;
-                }
-            });
+            Files.walkFileTree(sourceDirectory.toPath(), new JasminFileVisitor(outputDirectory));
+            Files.walkFileTree(testSourceDirectory.toPath(), new JasminFileVisitor(testOutputDirectory));
         } catch (IOException e) {
             throw new RuntimeException(e);
-        }
-
-
-        File f = outputDirectory;
-
-        if (!f.exists()) {
-            f.mkdirs();
-        }
-
-        File touch = new File(f, "touch.txt");
-        try (
-                FileWriter w = new FileWriter(touch);
-        ) {
-
-
-            w.write("touch.txt");
-        } catch (IOException e) {
-            throw new MojoExecutionException("Error creating file " + touch, e);
         }
     }
 }
